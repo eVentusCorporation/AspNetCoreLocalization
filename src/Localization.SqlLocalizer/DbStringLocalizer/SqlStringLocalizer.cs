@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using Microsoft.Extensions.Localization;
@@ -7,7 +8,7 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
 {
     public class SqlStringLocalizer : IStringLocalizer
     {
-        private readonly Dictionary<string, string> _localizations;
+        private readonly ConcurrentDictionary<string, string> _localizations;
 
         private readonly DevelopmentSetup _developmentSetup;
         private readonly string _resourceKey;
@@ -16,7 +17,7 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
 
         public SqlStringLocalizer(Dictionary<string, string> localizations, DevelopmentSetup developmentSetup, string resourceKey, bool returnKeyOnlyIfNotFound, bool createNewRecordWhenLocalisedStringDoesNotExist)
         {
-            _localizations = localizations;
+            _localizations = new ConcurrentDictionary<string, string>(localizations);
             _developmentSetup = developmentSetup;
             _resourceKey = resourceKey;
             _returnKeyOnlyIfNotFound = returnKeyOnlyIfNotFound;
@@ -65,6 +66,7 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
             string computedKey = $"{key}.{culture}";
 
             string result;
+
             if (_localizations.TryGetValue(computedKey, out result))
             {
                 notSucceed = false;
@@ -75,10 +77,14 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
                 notSucceed = true;
                 if (_createNewRecordWhenLocalisedStringDoesNotExist)
                 {
-                    _developmentSetup.AddNewLocalizedItem(key, culture, _resourceKey);
-                    _localizations.Add(computedKey, computedKey);
-                    return computedKey;
+                    if (_developmentSetup.TryAddNewLocalizedItem(key, culture, _resourceKey, out var text))
+                    {
+                        _localizations.TryAdd(computedKey, text);
+                    }
+
+                    return text;
                 }
+
                 if (_returnKeyOnlyIfNotFound)
                 {
                     return key;

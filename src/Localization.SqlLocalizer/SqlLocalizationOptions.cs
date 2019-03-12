@@ -25,18 +25,27 @@ namespace Localization.SqlLocalizer
         public bool CreateNewRecordWhenLocalisedStringDoesNotExist { get; set; }
 
         /// <summary>
+        /// If AppendCultureToNewRecordText is true, the text column will default to [key].[culture].
+        /// Otherwise, the text column will default to the key value.
+        /// </summary>
+        public bool AppendCultureToNewRecordText { get; set; }
+
+        /// <summary>
         /// You can set the required properties to set, get, display the different localization
         /// </summary>
         /// <param name="useTypeFullNames"></param>
         /// <param name="useOnlyPropertyNames"></param>
         /// <param name="returnOnlyKeyIfNotFound"></param>
         /// <param name="createNewRecordWhenLocalisedStringDoesNotExist"></param>
-        public void UseSettings(bool useTypeFullNames, bool useOnlyPropertyNames, bool returnOnlyKeyIfNotFound, bool createNewRecordWhenLocalisedStringDoesNotExist)
+        /// <param name="appendCultureToNewRecordText"></param>
+        public void UseSettings(bool useTypeFullNames, bool useOnlyPropertyNames, bool returnOnlyKeyIfNotFound,
+            bool createNewRecordWhenLocalisedStringDoesNotExist, bool appendCultureToNewRecordText = true)
         {
             UseTypeFullNames = useTypeFullNames;
             UseOnlyPropertyNames = useOnlyPropertyNames;
             ReturnOnlyKeyIfNotFound = returnOnlyKeyIfNotFound;
             CreateNewRecordWhenLocalisedStringDoesNotExist = createNewRecordWhenLocalisedStringDoesNotExist;
-    }
+            AppendCultureToNewRecordText = appendCultureToNewRecordText;
+        }
     }
 }
