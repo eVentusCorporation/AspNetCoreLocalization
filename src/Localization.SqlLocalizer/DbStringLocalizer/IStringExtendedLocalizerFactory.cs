@@ -23,5 +23,6 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
 
         void AddNewLocalizationData(List<LocalizationRecord> data, string information);
 
+        void UpdateCache(string resourceKey, string culture, string key, string text);
     }
 }

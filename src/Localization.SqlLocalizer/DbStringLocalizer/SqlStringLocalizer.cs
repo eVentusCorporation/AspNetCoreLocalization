@@ -94,7 +94,13 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
             }
         }
 
-        
+        public void UpdateCache(string culture, string key, string text)
+        {
+            var computedKey = $"{key}.{culture}";
 
+            if (!_localizations.ContainsKey(computedKey)) return;
+
+            _localizations[computedKey] = text;
+        }
     }
 }

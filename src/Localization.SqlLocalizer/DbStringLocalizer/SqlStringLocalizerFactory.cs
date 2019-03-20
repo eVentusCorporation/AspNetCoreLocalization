@@ -98,6 +98,14 @@ namespace Localization.SqlLocalizer.DbStringLocalizer
             }
         }
 
+        public void UpdateCache(string resourceKey, string culture, string key, string text)
+        {
+            _resourceLocalizations.TryGetValue(resourceKey, out var localizer);
+            var sqlLocalizer = localizer as SqlStringLocalizer;
+
+            sqlLocalizer?.UpdateCache(culture, key, text);
+        }
+
         private Dictionary<string, string> GetAllFromDatabaseForResource(string resourceKey)
         {
             lock (_context)
