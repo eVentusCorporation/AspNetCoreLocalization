@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading.Tasks;
 using Localization.SqlLocalizer.DbStringLocalizer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
-using Newtonsoft.Json;
 
 namespace ImportExportLocalization.Controllers
 {
@@ -48,7 +46,7 @@ namespace ImportExportLocalization.Controllers
 
                         var inputStream = file.OpenReadStream();
                         var items = readStream(file.OpenReadStream());
-                        _stringExtendedLocalizerFactory.UpdatetLocalizationData(items, csvImportDescription.Information);
+                        _stringExtendedLocalizerFactory.UpdateLocalizationData(items, csvImportDescription.Information);
                     }
                 }
             }
@@ -85,10 +83,10 @@ namespace ImportExportLocalization.Controllers
 
         private List<LocalizationRecord> readStream(Stream stream)
         {
-            bool skipFirstLine = true;
-            string csvDelimiter = ";";
+            var skipFirstLine = true;
+            var csvDelimiter = ";";
 
-            List<LocalizationRecord> list = new List<LocalizationRecord>();
+            var list = new List<LocalizationRecord>();
             var reader = new StreamReader(stream);
 
 
@@ -105,7 +103,7 @@ namespace ImportExportLocalization.Controllers
                     var itemTypeInGeneric = list.GetType().GetTypeInfo().GenericTypeArguments[0];
                     var item = new LocalizationRecord();
                     var properties = item.GetType().GetProperties();
-                    for (int i = 0; i < values.Length; i++)
+                    for (var i = 0; i < values.Length; i++)
                     {
                         properties[i].SetValue(item, Convert.ChangeType(values[i], properties[i].PropertyType), null);
                     }

@@ -6,9 +6,9 @@ install:
   - dotnet --version
   - dotnet restore
 build_script:
-- dotnet build
+  - dotnet build
 before_build:
-- appveyor-retry dotnet restore -v Minimal
+  - appveyor-retry dotnet restore -v Minimal
 test_script:
-- cd src/Localization.SqlLocalizer.IntegrationTests
-- dotnet test
+  - cd src/Localization.SqlLocalizer.IntegrationTests
+  - dotnet test

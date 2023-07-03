@@ -24,7 +24,7 @@ namespace Localization.SqlLocalizer.IntegrationTests
                     var sqlConnectionString = "Data Source=.\\LocalizationRecords.sqlite";
 
                     services.AddDbContext<LocalizationModelContext>(options =>
-                        options.UseSqlite(
+                        options.UseSq(
                             sqlConnectionString,
                             b => b.MigrationsAssembly("AspNetCoreLocalization")
                         )

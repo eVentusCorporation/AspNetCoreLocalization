@@ -3,26 +3,25 @@ using System.Collections;
 using System.Collections.Generic;
 using Microsoft.Extensions.Localization;
 
-namespace Localization.SqlLocalizer.DbStringLocalizer
+namespace Localization.SqlLocalizer.DbStringLocalizer;
+
+public interface IStringExtendedLocalizerFactory : IStringLocalizerFactory
 {
-    public interface IStringExtendedLocalizerFactory : IStringLocalizerFactory
-    {
-        void ResetCache();
+    void ResetCache();
 
-        void ResetCache(Type resourceSource);
+    void ResetCache(Type resourceSource);
 
-        IList GetImportHistory();
+    IList GetImportHistory();
 
-        IList GetExportHistory();
+    IList GetExportHistory();
 
-        IList GetLocalizationData(string reason = "export");
+    IList GetLocalizationData(string reason = "export");
 
-        IList GetLocalizationData(DateTime from, string culture = null, string reason = "export");
+    IList GetLocalizationData(DateTime from, string culture = null, string reason = "export");
 
-        void UpdatetLocalizationData(List<LocalizationRecord> data, string information);
+    void UpdateLocalizationData(IEnumerable<LocalizationRecord> data, string information);
 
-        void AddNewLocalizationData(List<LocalizationRecord> data, string information);
+    void AddNewLocalizationData(IEnumerable<LocalizationRecord> data, string information);
 
-        void UpdateCache(string resourceKey, string culture, string key, string text);
-    }
+    void UpdateCache(string resourceKey, string culture, string key, string text);
 }

@@ -7,182 +7,184 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 
-namespace Localization.SqlLocalizer.DbStringLocalizer
+namespace Localization.SqlLocalizer.DbStringLocalizer;
+
+public class SqlStringLocalizerFactory : IStringExtendedLocalizerFactory
 {
-    public class SqlStringLocalizerFactory : IStringLocalizerFactory, IStringExtendedLocalizerFactory
+    private const string Global = "global";
+    private static readonly ConcurrentDictionary<string, IStringLocalizer> ResourceLocalizations = new();
+    private readonly LocalizationModelContext _context;
+    private readonly DevelopmentSetup _developmentSetup;
+    private readonly IOptions<SqlLocalizationOptions> _options;
+
+    public SqlStringLocalizerFactory(
+        LocalizationModelContext context,
+        DevelopmentSetup developmentSetup,
+        IOptions<SqlLocalizationOptions> localizationOptions)
     {
-        private readonly DevelopmentSetup _developmentSetup;
-        private readonly LocalizationModelContext _context;
-        private static readonly ConcurrentDictionary<string, IStringLocalizer> _resourceLocalizations = new ConcurrentDictionary<string, IStringLocalizer>();
-        private readonly IOptions<SqlLocalizationOptions> _options;
-        private const string Global = "global";
+        _options = localizationOptions ?? throw new ArgumentNullException(nameof(localizationOptions));
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _developmentSetup = developmentSetup;
+    }
 
-        public SqlStringLocalizerFactory(
-           LocalizationModelContext context,
-           DevelopmentSetup developmentSetup,
-           IOptions<SqlLocalizationOptions> localizationOptions)
+    public IStringLocalizer Create(Type resourceSource)
+    {
+        var returnOnlyKeyIfNotFound = _options.Value.ReturnOnlyKeyIfNotFound;
+        var createNewRecordWhenLocalisedStringDoesNotExist =
+            _options.Value.CreateNewRecordWhenLocalisedStringDoesNotExist;
+        SqlStringLocalizer sqlStringLocalizer;
+
+        if (_options.Value.UseOnlyPropertyNames)
         {
-            _options = localizationOptions ?? throw new ArgumentNullException(nameof(localizationOptions));
-            _context = context ?? throw new ArgumentNullException(nameof(LocalizationModelContext));
-            _developmentSetup = developmentSetup;
+            if (ResourceLocalizations.Keys.Contains(Global)) return ResourceLocalizations[Global];
+
+            sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(Global), _developmentSetup,
+                Global, returnOnlyKeyIfNotFound, createNewRecordWhenLocalisedStringDoesNotExist);
+            return ResourceLocalizations.GetOrAdd(Global, sqlStringLocalizer);
         }
 
-        public IStringLocalizer Create(Type resourceSource)
+        if (_options.Value.UseTypeFullNames)
         {
-            var returnOnlyKeyIfNotFound = _options.Value.ReturnOnlyKeyIfNotFound;
-            var createNewRecordWhenLocalisedStringDoesNotExist = _options.Value.CreateNewRecordWhenLocalisedStringDoesNotExist;
-            SqlStringLocalizer sqlStringLocalizer;
+            if (resourceSource.FullName != null &&
+                ResourceLocalizations.TryGetValue(resourceSource.FullName, out var resourceLocalization))
+                return resourceLocalization;
 
-            if (_options.Value.UseOnlyPropertyNames)
-            {
-                if (_resourceLocalizations.Keys.Contains(Global))
-                {
-                    return _resourceLocalizations[Global];
-                }
-
-                sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(Global),  _developmentSetup, Global, returnOnlyKeyIfNotFound, createNewRecordWhenLocalisedStringDoesNotExist);
-                return _resourceLocalizations.GetOrAdd(Global, sqlStringLocalizer);
-                
-            }
-            else if (_options.Value.UseTypeFullNames)
-            {
-                if (_resourceLocalizations.Keys.Contains(resourceSource.FullName))
-                {
-                    return _resourceLocalizations[resourceSource.FullName];
-                }
-
-                sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(resourceSource.FullName), _developmentSetup, resourceSource.FullName, returnOnlyKeyIfNotFound, createNewRecordWhenLocalisedStringDoesNotExist);
-                return _resourceLocalizations.GetOrAdd(resourceSource.FullName, sqlStringLocalizer);
-            }
-
-            if (_resourceLocalizations.Keys.Contains(resourceSource.Name))
-            {
-                return _resourceLocalizations[resourceSource.Name];
-            }
-
-            sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(resourceSource.Name), _developmentSetup, resourceSource.Name, returnOnlyKeyIfNotFound, createNewRecordWhenLocalisedStringDoesNotExist);
-            return _resourceLocalizations.GetOrAdd(resourceSource.Name, sqlStringLocalizer);
+            sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(resourceSource.FullName),
+                _developmentSetup, resourceSource.FullName, returnOnlyKeyIfNotFound,
+                createNewRecordWhenLocalisedStringDoesNotExist);
+            return ResourceLocalizations.GetOrAdd(resourceSource.FullName, sqlStringLocalizer);
         }
 
-        public IStringLocalizer Create(string baseName, string location)
-        {
-            var returnOnlyKeyIfNotFound = _options.Value.ReturnOnlyKeyIfNotFound;
-            var createNewRecordWhenLocalisedStringDoesNotExist = _options.Value.CreateNewRecordWhenLocalisedStringDoesNotExist;
-            if (_resourceLocalizations.Keys.Contains(baseName + location))
-            {
-                return _resourceLocalizations[baseName + location];
-            }
+        if (ResourceLocalizations.TryGetValue(resourceSource.Name, out var localization)) return localization;
 
-            var sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(baseName + location), _developmentSetup, baseName + location, false, false);
-            return _resourceLocalizations.GetOrAdd(baseName + location, sqlStringLocalizer);
+        sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(resourceSource.Name),
+            _developmentSetup, resourceSource.Name, returnOnlyKeyIfNotFound,
+            createNewRecordWhenLocalisedStringDoesNotExist);
+        return ResourceLocalizations.GetOrAdd(resourceSource.Name, sqlStringLocalizer);
+    }
+
+    public IStringLocalizer Create(string baseName, string location)
+    {
+        if (ResourceLocalizations.ContainsKey(baseName + location)) return ResourceLocalizations[baseName + location];
+
+        var sqlStringLocalizer = new SqlStringLocalizer(GetAllFromDatabaseForResource(baseName + location),
+            _developmentSetup, baseName + location, false, false);
+        return ResourceLocalizations.GetOrAdd(baseName + location, sqlStringLocalizer);
+    }
+
+    public void ResetCache()
+    {
+        lock (_context)
+        {
+            _context.DetachAllEntities();
         }
 
-        public void ResetCache()
+        foreach (var localizerKey in ResourceLocalizations.Keys)
         {
-            _resourceLocalizations.Clear();
+            var localizer = ResourceLocalizations[localizerKey] as SqlStringLocalizer;
 
-            lock (_context)
-            {
-                _context.DetachAllEntities();
-            }
+            localizer?.ReloadLocalizations(GetAllFromDatabaseForResource(localizerKey));
+        }
+    }
+
+    public void ResetCache(Type resourceSource)
+    {
+        lock (_context)
+        {
+            _context.DetachAllEntities();
         }
 
-        public void ResetCache(Type resourceSource)
-        {
-            IStringLocalizer returnValue;
-            _resourceLocalizations.TryRemove(resourceSource.FullName, out returnValue);
+        if (resourceSource.FullName == null ||
+            !ResourceLocalizations.TryGetValue(resourceSource.FullName, out _)) return;
+        var localizer = ResourceLocalizations[resourceSource.FullName] as SqlStringLocalizer;
 
-            lock (_context)
-            {
-                _context.DetachAllEntities();                
-            }
+        localizer?.ReloadLocalizations(GetAllFromDatabaseForResource(resourceSource.FullName));
+    }
+
+    public void UpdateCache(string resourceKey, string culture, string key, string text)
+    {
+        ResourceLocalizations.TryGetValue(resourceKey, out var localizer);
+        var sqlLocalizer = localizer as SqlStringLocalizer;
+
+        sqlLocalizer?.UpdateCache(culture, key, text);
+    }
+
+    public IList GetImportHistory()
+    {
+        lock (_context)
+        {
+            return _context.ImportHistoryDbSet.ToList();
         }
+    }
 
-        public void UpdateCache(string resourceKey, string culture, string key, string text)
+    public IList GetExportHistory()
+    {
+        lock (_context)
         {
-            _resourceLocalizations.TryGetValue(resourceKey, out var localizer);
-            var sqlLocalizer = localizer as SqlStringLocalizer;
-
-            sqlLocalizer?.UpdateCache(culture, key, text);
+            return _context.ExportHistoryDbSet.ToList();
         }
+    }
 
-        private Dictionary<string, string> GetAllFromDatabaseForResource(string resourceKey)
+    public IList GetLocalizationData(string reason = "export")
+    {
+        lock (_context)
         {
-            lock (_context)
-            {
-                return _context.LocalizationRecords.Where(data => data.ResourceKey == resourceKey)
-                    .ToDictionary(kvp => (kvp.Key + "." + kvp.LocalizationCulture), kvp => kvp.Text);
-            }
+            _context.ExportHistoryDbSet.Add(new ExportHistory { Reason = reason, Exported = DateTime.UtcNow });
+            _context.SaveChanges();
+
+            return _context.LocalizationRecords.ToList();
         }
+    }
 
-        public IList GetImportHistory()
+    public IList GetLocalizationData(DateTime from, string culture = null, string reason = "export")
+    {
+        lock (_context)
         {
-            lock (_context)
-            {
-                return _context.ImportHistoryDbSet.ToList();
-            }
+            _context.ExportHistoryDbSet.Add(new ExportHistory { Reason = reason, Exported = DateTime.UtcNow });
+            _context.SaveChanges();
+
+            if (culture != null)
+                return _context.LocalizationRecords.Where(item =>
+                        EF.Property<DateTime>(item, "UpdatedTimestamp") > from &&
+                        item.LocalizationCulture == culture)
+                    .ToList();
+
+            return _context.LocalizationRecords
+                .Where(item => EF.Property<DateTime>(item, "UpdatedTimestamp") > from).ToList();
         }
+    }
 
-        public IList GetExportHistory()
+
+    public void UpdateLocalizationData(IEnumerable<LocalizationRecord> data, string information)
+    {
+        lock (_context)
         {
-            lock (_context)
-            {
-                return _context.ExportHistoryDbSet.ToList();
-            }
+            _context.DetachAllEntities();
+            _context.UpdateRange(data);
+            _context.ImportHistoryDbSet.Add(new ImportHistory
+                { Information = information, Imported = DateTime.UtcNow });
+            _context.SaveChanges();
         }
+    }
 
-        public IList GetLocalizationData(string reason = "export")
+    public void AddNewLocalizationData(IEnumerable<LocalizationRecord> data, string information)
+    {
+        lock (_context)
         {
-            lock (_context)
-            {
-                _context.ExportHistoryDbSet.Add(new ExportHistory {Reason = reason, Exported = DateTime.UtcNow});
-                _context.SaveChanges();
-
-                return _context.LocalizationRecords.ToList();
-            }
+            _context.DetachAllEntities();
+            _context.AddRange(data);
+            _context.ImportHistoryDbSet.Add(new ImportHistory
+                { Information = information, Imported = DateTime.UtcNow });
+            _context.SaveChanges();
         }
+    }
 
-        public IList GetLocalizationData(DateTime from, string culture = null, string reason = "export")
+    private Dictionary<string, string> GetAllFromDatabaseForResource(string resourceKey)
+    {
+        lock (_context)
         {
-            lock (_context)
-            {
-                _context.ExportHistoryDbSet.Add(new ExportHistory {Reason = reason, Exported = DateTime.UtcNow});
-                _context.SaveChanges();
-
-                if (culture != null)
-                {
-                    return _context.LocalizationRecords.Where(item =>
-                            EF.Property<DateTime>(item, "UpdatedTimestamp") > from &&
-                            item.LocalizationCulture == culture)
-                        .ToList();
-                }
-
-                return _context.LocalizationRecords
-                    .Where(item => EF.Property<DateTime>(item, "UpdatedTimestamp") > from).ToList();
-            }
-        }
-
- 
-        public void UpdatetLocalizationData(List<LocalizationRecord> data, string information)
-        {
-            lock (_context)
-            {
-                _context.DetachAllEntities();
-                _context.UpdateRange(data);
-                _context.ImportHistoryDbSet.Add(new ImportHistory { Information = information, Imported = DateTime.UtcNow });
-                _context.SaveChanges();                
-            }
-        }
-
-        public void AddNewLocalizationData(List<LocalizationRecord> data, string information)
-        {
-            lock (_context)
-            {
-                _context.DetachAllEntities();
-                _context.AddRange(data);
-                _context.ImportHistoryDbSet.Add(new ImportHistory { Information = information, Imported = DateTime.UtcNow });
-                _context.SaveChanges();                
-            }
+            return _context.LocalizationRecords.Where(data => data.ResourceKey == resourceKey)
+                .ToDictionary(kvp => kvp.Key + "." + kvp.LocalizationCulture, kvp => kvp.Text);
         }
     }
 }
